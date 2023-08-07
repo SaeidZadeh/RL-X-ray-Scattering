@@ -1,0 +1,195 @@
+import numpy as np
+import random
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+
+# Define the environment class
+class Environment:
+    def __init__(self, reflectivity_values, time_measurement, parameters, X):
+        self.reflectivity_values = reflectivity_values
+        self.time_measurement = time_measurement
+        self.parameters = parameters
+        self.X = X
+
+    def reset(self):
+        # Reset the environment state
+        self.state = {
+            'positions': self.X,
+            'reflectivity': self.reflectivity_values[:, self.X],
+            'time': self.time_measurement[:, self.X]
+        }
+        return self.state
+
+    def step(self, action):
+        # Update the environment state based on the selected action
+        new_position = action
+
+        # Measure reflectivity and time at the new position
+        new_reflectivity = self.reflectivity_values[:, new_position]
+        new_time = self.time_measurement[:, new_position]
+        # Read next q-point time measurement from a file
+        '''
+        file = open("example.txt", "r")
+        # Move the file pointer to the desired position
+        file.seek(10)  # Seek to the 10th byte in the file
+        # Read the desired data from the file
+        file_data = file.read(5)  # Read 5 characters from the current position
+        # Close the file
+        file.close()
+        # Validate if the input is numeric
+        if user_input.isnumeric():
+        # Convert the input to integer or float if required
+            numeric_input = float(user_input)
+        new_time = file_data
+        '''
+        # Read next q-point time measurement from a user input
+        '''
+        # Prompt the user for input
+        user_data = input("Enter a value: ")
+                # Validate if the input is numeric
+        if user_input.isnumeric():
+        # Convert the input to integer or float if required
+            numeric_input = float(user_input)
+        new_time = user_data
+        '''
+        #This can be also applied to new_reflectivity
+        
+        # Update the state
+        self.state['positions'] = np.append(self.state['positions'], new_position)
+        self.state['reflectivity'] = np.append(self.state['reflectivity'], new_reflectivity)
+        self.state['time'] = np.append(self.state['time'], new_time)
+
+        # Calculate the reward based on prediction accuracy
+        predicted_parameters = agent.predict(self.state['reflectivity'], self.state['time'])
+        reward = -np.mean(np.abs(predicted_parameters - self.parameters))
+
+        # Check if all positions have been selected
+        done = len(self.state['positions']) == len(self.reflectivity_values[0])
+
+        return self.state, reward, done
+
+# Define the DQN agent
+class DQNAgent:
+    def __init__(self, state_size, action_size, hidden_size=64, learning_rate=0.001, gamma=0.99, epsilon_decay=0.999,
+                 memory_size=2000, batch_size=32):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.hidden_size = hidden_size
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.epsilon = 1.0
+        self.epsilon_decay = epsilon_decay
+        self.memory = []
+        self.memory_size = memory_size
+        self.batch_size = batch_size
+        self.model = self._build_model()
+
+    def _build_model(self):
+        # Build a deep neural network model
+        model = Sequential()
+        model.add(Dense(self.hidden_size, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(self.hidden_size, activation='relu'))
+        model.add(Dense(self.hidden_size, activation='relu'))
+        model.add(Dense(self.hidden_size, activation='relu'))
+        model.add(Dense(self.hidden_size, activation='relu'))
+        model.add(Dense(self.action_size))
+        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        return model
+
+    def act(self, state):
+        # Epsilon-greedy action selection
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_size)
+        else:
+            return np.argmax(self.model.predict(state)[0])
+
+    def remember(self, state, action, reward, next_state, done):
+        # Add the experience to the memory
+        self.memory.append((state, action, reward, next_state, done))
+        if len(self.memory) > self.memory_size:
+            self.memory = self.memory[-self.memory_size:]
+
+    def replay(self):
+        # Train the agent by replaying experiences from memory
+        if len(self.memory) < self.batch_size:
+            return
+        minibatch = random.sample(self.memory, self.batch_size)
+        states = np.zeros((self.batch_size, self.state_size))
+        targets = np.zeros((self.batch_size, self.action_size))
+        for i, (state, action, reward, next_state, done) in enumerate(minibatch):
+            states[i] = state
+            target = reward
+            if not done:
+                target += self.gamma * np.amax(self.model.predict(next_state)[0])
+            targets[i] = self.model.predict(state)
+            targets[i][action] = target
+        self.model.fit(states, targets, epochs=1, verbose=0)
+        if self.epsilon > 0.01:
+            self.epsilon *= self.epsilon_decay
+
+    def predict(self, reflectivity, time):
+        # Predict the parameters based on reflectivity and time measurements
+        return self.model.predict(np.hstack((reflectivity, time)))
+
+# Set the parameters
+N = 10000
+num_positions = 1024
+num_parameters = 4
+X = random.sample(range(num_positions), N)
+reflectivity_values = np.random.rand(num_parameters, num_positions)
+time_measurement = np.random.rand(num_parameters, num_positions)
+parameters = np.random.rand(num_parameters)
+
+# Create the environment
+env = Environment(reflectivity_values, time_measurement, parameters, X)
+
+# Define the state and action sizes
+state_size = num_parameters * len(X)
+action_size = num_positions - len(X)
+
+# Create the agent
+agent = DQNAgent(state_size, action_size)
+
+# Train the agent
+episodes = 1000
+for episode in range(episodes):
+    state = env.reset()
+    done = False
+    while not done:
+        action = agent.act(state)
+        next_state, reward, done = env.step(action)
+        agent.remember(state, action, reward, next_state, done)
+        state = next_state
+        agent.replay()
+
+    print("Episode: {}/{} | Epsilon: {:.2f}".format(episode + 1, episodes, agent.epsilon))
+
+# Save the weights
+agent.model.save_weights('agent_weights.h5')
+
+# Make a measurement on a new data point
+new_X = random.sample(range(1024), 100)  # New subset X with 100 q-points
+new_reflectivity = reflectivity_values[:, new_X]
+new_time = time_measurement[:, new_X]
+new_state = {
+    'positions': new_X,
+    'reflectivity': new_reflectivity,
+    'time': new_time
+}
+
+action = agent.act(new_state)
+next_state, ground_truth_parameters_y, time_measurement_y = env.step(action)
+predicted_parameters = agent.predict(new_state['reflectivity'], new_state['time'])
+print("Measurement on New Data Point:")
+print(f"Selected q-point: {action}")
+print(f"Measured time: {time_measurement_y}")
+print(f"Predicted parameters: {predicted_parameters}")
+
+predicted_parameters = agent.predict(next_state['reflectivity'], next_state['time'])
+print("Predicted Parameters:", predicted_parameters[0])
+
+# Load the weights
+agent.model.load_weights('agent_weights.h5')
+
+# Continue training or make predictions using the loaded weights
