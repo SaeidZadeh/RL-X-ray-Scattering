@@ -1,4 +1,7 @@
 # X-ray-Scattering
+**Author:** Saeid Alirezazadeh
+**Date:** 07-08-2023
+
 ## Reinforcement Learning
 The code for reinforcement learning approach used to obtain measurement time, and find highest accuracy in predicting Thickness, Roughness, and SLD with only partial q-points.
 
