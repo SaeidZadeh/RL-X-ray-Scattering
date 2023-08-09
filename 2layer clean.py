@@ -218,6 +218,13 @@ for i in range(100):
 concatenated_data = np.concatenate(data_list, axis=0)
 dat=pd.DataFrame(concatenated_data)
 X = dat.iloc[:,:].values
+############Clean Incorrect simulated data
+W = []
+for i in range(len(X)):
+    if np.max(X[i,:1024])<1.0:
+        W.append(X[i,:])
+X = np.array(W)
+##############
 mi=[]
 ma=[]
 for i in range(len(X[0])-8):
@@ -284,6 +291,15 @@ for i in range(100):
 concatenated_data = np.concatenate(data_list, axis=0)
 dat=pd.DataFrame(concatenated_data)
 X = dat.iloc[:,:].values
+
+############Clean Incorrect simulated data
+W = []
+for i in range(len(X)):
+    if np.max(X[i,:1024])<1.0:
+        W.append(X[i,:])
+X = np.array(W)
+##############
+
 mi=[]
 ma=[]
 for i in range(len(X[0])-8):
@@ -328,7 +344,7 @@ import joblib
 # Define the RandomForestRegressor model with hyperparameters
 model = RandomForestRegressor(n_estimators=500, max_depth=16, random_state=42, n_jobs=12)
 
-sample1 = sample(range(1000000),500000)
+sample1 = sample(range(len(X)),int(len(X)/2))
 X_train = data1.iloc[sample1,:-8].values
 y_train = data1.iloc[sample1,-8:].values
 model.fit(X_train, y_train)
@@ -337,7 +353,3 @@ model.fit(X_train, y_train)
 # Save the trained model to disk
 
 joblib.dump(model, '/home/kowarik/Documents/Saeid/Data2layer/Models/RandomForestReg/random_forest_regressor_500t_2layers.joblib')
-
-
-
-#############################Comparison
