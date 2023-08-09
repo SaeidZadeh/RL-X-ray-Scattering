@@ -22,7 +22,7 @@ from keras.layers import Dense
 from keras.optimizers import SGD
 from time import time
 import random
-
+from scipy.optimize import minimize
 
 import refnx
 from refnx.dataset import ReflectDataset, Data1D
@@ -42,15 +42,16 @@ import numpy as np
 from random import sample
 import pandas as pd
 import matplotlib.pyplot as plt
+import numbers
 
 import joblib
 import pickle
 
 
-modelf = joblib.load('/home/kowarik/Documents/Saeid/Data/Models/RandomForestReg/random_forest_regressor_1024.joblib')
+modelf = joblib.load('/home/kowarik/Documents/Saeid/Data2layer/Models/RandomForestReg/random_forest_regressor_500t_2layers.joblib')
 
-autoencoder_model=tf.keras.models.load_model('/home/kowarik/Documents/Saeid/Data/Models/AutoEncoder/Autoencoder_fit_1024.h5')
-parameters_model=tf.keras.models.load_model('/home/kowarik/Documents/Saeid/Data/Models/NN_model/trained_model_all_parameters_1024.h5')
+autoencoder_model=tf.keras.models.load_model('/home/kowarik/Documents/Saeid/Data2layer/Models/AutoEncoder/Autoencoder_fit_1024_2layer.h5')
+parameters_model=tf.keras.models.load_model('/home/kowarik/Documents/Saeid/Data2layer/Models/NN_model/trained_model_all_parameters_1024_2layer.h5')
 
 
 
@@ -61,32 +62,152 @@ def Fit_Thick(X,q_values,Z):
     air = SLD(0-0j, name='first')
     s= air(0,1)
     structure=s
-    labl="Layer"
+    labl="Layer1"
     tmp_var=1j
     k=Z[-2]+Z[-1]*tmp_var
     w=SLD(k, name=labl)
-    midl_layer=w(Z[-4],Z[-3])
-    structure=structure|midl_layer
-
+    midl_layer1=w(Z[-4],Z[-3])
+    structure=structure|midl_layer1
+    labl="Layer2"
+    tmp_var=1j
+    k=Z[-6]+Z[-5]*tmp_var
+    w=SLD(k, name=labl)
+    midl_layer2=w(Z[-8],Z[-7])
+    structure=structure|midl_layer2
+    
     si = SLD(20-0.1j, name='last')
     s = si(0,0)
     structure=structure|s
     model = ReflectModel(structure, bkg=3e-9, dq=0)
-    midl_layer.sld.real.setp(bounds=(1e-3,300), vary=True)
-    midl_layer.sld.imag.setp(bounds=(-20, -1e-3), vary=True)
-    midl_layer.thick.setp(bounds=(20,400), vary=True)
-    midl_layer.rough.setp(bounds=(1e-3,60), vary=True)
+    midl_layer1.sld.real.setp(bounds=(1e-3,300), vary=True)
+    midl_layer1.sld.imag.setp(bounds=(-20, -1e-3), vary=True)
+    midl_layer1.thick.setp(bounds=(20,400), vary=True)
+    midl_layer1.rough.setp(bounds=(1e-3,60), vary=True)
+    midl_layer2.sld.real.setp(bounds=(1e-3,300), vary=True)
+    midl_layer2.sld.imag.setp(bounds=(-20, -1e-3), vary=True)
+    midl_layer2.thick.setp(bounds=(20,400), vary=True)
+    midl_layer2.rough.setp(bounds=(1e-3,60), vary=True)
     model.bkg.setp(bounds=(1e-9, 9e-6), vary=True)
     #model.dq.setp(bounds=(1e-3,5),vary=True)
     objective = Objective(model, Y, transform=Transform('logY'))
 
     fitter = CurveFitter(objective)
     fitter.fit('differential_evolution');
-    result.append(objective.parameters['Structure - ']['Layer']['Layer - thick'].value)
-    result.append(objective.parameters['Structure - ']['Layer']['Layer - rough'].value)
-    result.append(objective.parameters['Structure - ']['Layer']['Layer']['Layer - sld'].value)
-    result.append(objective.parameters['Structure - ']['Layer']['Layer']['Layer - isld'].value)
+    result.append(objective.parameters['Structure - ']['Layer1']['Layer1 - thick'].value)
+    result.append(objective.parameters['Structure - ']['Layer1']['Layer1 - rough'].value)
+    result.append(objective.parameters['Structure - ']['Layer1']['Layer1']['Layer1 - sld'].value)
+    result.append(objective.parameters['Structure - ']['Layer1']['Layer1']['Layer1 - isld'].value)
+    result.append(objective.parameters['Structure - ']['Layer2']['Layer2 - thick'].value)
+    result.append(objective.parameters['Structure - ']['Layer2']['Layer2 - rough'].value)
+    result.append(objective.parameters['Structure - ']['Layer2']['Layer2']['Layer2 - sld'].value)
+    result.append(objective.parameters['Structure - ']['Layer2']['Layer2']['Layer2 - isld'].value)
     return result
+
+def check_condition(randomized_roughnesses,randomized_thicknesses):
+    for i in range(len(randomized_roughnesses)):
+        if randomized_roughnesses[i] >= randomized_thicknesses[i]/2:
+            return True
+    return False
+
+def make_training_input(n_layer):
+    min_thickness, max_thickness = [20]*n_layer, [400]*n_layer
+    randomized_thicknesses = randomize_inputs(min_thickness, max_thickness)
+    min_roughness, max_roughness = [0]*n_layer, [60.0]*n_layer
+    randomized_roughnesses = randomize_inputsr(min_roughness, max_roughness)
+    min_scattering_length_density_real, max_scattering_length_density_real = [0]*n_layer, [300]*n_layer
+    min_scattering_length_density_img, max_scattering_length_density_img = [-20]*n_layer, [0]*n_layer
+    while check_condition(randomized_roughnesses,randomized_thicknesses):
+        randomized_roughnesses = randomize_inputsr(min_roughness, max_roughness)
+    randomized_SLDs_real = randomize_inputs(min_scattering_length_density_real, max_scattering_length_density_real)
+    randomized_SLDs_img = randomize_inputs(min_scattering_length_density_img, max_scattering_length_density_img)
+    return randomized_thicknesses, randomized_roughnesses, randomized_SLDs_real, randomized_SLDs_img
+
+def randomize_inputsr(min_value, max_value):
+    min_value = np.asarray(min_value)
+    max_value = np.asarray(max_value)
+    number_of_layers = len(min_value)
+    randomized_inputs = np.zeros([number_of_layers])
+    for layer in range(number_of_layers):
+        randomized_inputs[layer] = np.array(tf.random.uniform(shape=(1,),minval=min_value[layer], maxval=max_value[layer],dtype=tf.float64))
+    return randomized_inputs
+
+def randomize_inputs(min_value, max_value):
+    min_value = np.asarray(min_value)
+    max_value = np.asarray(max_value)
+    if np.all(np.isreal(min_value)) and np.all(np.isreal(max_value)):
+        number_of_layers = len(min_value)
+        randomized_inputs = np.zeros([number_of_layers])
+        for layer in range(number_of_layers):
+            randomized_inputs[layer] = np.array(tf.random.uniform(shape=(1,),minval=min_value[layer], maxval=max_value[layer],dtype=tf.float64))
+        return randomized_inputs
+    else:
+        real_min_value = min_value.real
+        real_max_value = max_value.real
+        imag_min_value = min_value.imag
+        imag_max_value = max_value.imag
+        real_randomized_inputs = randomize_inputs(real_min_value, real_max_value,1)
+        imag_randomized_inputs = randomize_inputs(imag_min_value, imag_max_value,1)
+        complex_randomized_inputs = real_randomized_inputs + 1j * imag_randomized_inputs
+        return complex_randomized_inputs
+
+def make_reflectivity_curves(
+    q_values, thicknesses, roughnesses, SLDs_real,SLDs_img
+):
+    air = SLD(0-0j, name='first')
+    s= air(0,1)
+    structure=s
+    if isinstance(thicknesses, numbers.Number):
+        thicknesses, roughnesses, SLDs_real,SLDs_img = [thicknesses], [roughnesses], [SLDs_real], [SLDs_img]
+    for i in range(len(thicknesses)):
+        labl=f"Layer_{i}"
+        k=SLDs_real[i]-SLDs_img[i]*1j
+        w=SLD(k, name=labl)
+        s=w(thicknesses[i],roughnesses[i])
+        structure=structure|s
+    si = SLD(20-0.1j, name='last')
+    s = si(0,0)
+    structure=structure|s
+    model = ReflectModel(structure, bkg=1e-7, dq=0.0)
+    reflectivity = model(q_values)
+    if np.count_nonzero(np.isnan(reflectivity)) < len(reflectivity) and len(np.isnan(reflectivity)) > 0:
+        reflectivity[np.isnan(reflectivity)] = next(x for x in reflectivity if not np.isnan(x))
+    if np.count_nonzero(np.isnan(reflectivity)) == len(reflectivity):
+        reflectivity[np.isnan(reflectivity)] = (q_values-0.6)/0.59
+    #reflectivity_noisy = apply_shot_noise(reflectivity)
+    reflectivity_curve = reflectivity#_noisy
+
+    return reflectivity_curve
+
+
+def apply_shot_noise(reflectivity_curve):
+    noisy_reflectivity = np.clip(
+        np.random.poisson(
+            reflectivity_curve*1e6
+        )*1e-6,
+        1e-6,
+        None,
+    )
+
+    return noisy_reflectivity
+
+def make_training_data(n_layers):   #part of generate training data
+    training_data_input = make_training_input(n_layers)
+    [thicknesses, roughnesses, SLDs_real, SLDs_img] = training_data_input
+ 
+    training_reflectivity = make_reflectivity_curves(q_values, thicknesses, roughnesses, SLDs_real, SLDs_img)
+    return training_reflectivity
+
+# Define the predicted curve using four parameters (a, b, c, d)
+def predicted_curve(q_values, thicknesses, roughnesses, SLDs_real, SLDs_img):
+    return make_reflectivity_curves(q_values, thicknesses, roughnesses, SLDs_real, SLDs_img)
+
+# Define the mean square error function
+def mean_square_error(y_pred,y_true, q_values):
+    y_actual = y_true
+    thicknesses1, roughnesses1, SLDs_real1, SLDs_img1 = y_pred
+    y_predicted = predicted_curve(q_values, thicknesses1, roughnesses1, SLDs_real1, SLDs_img1)
+    mse = np.mean((y_actual - y_predicted) ** 2)
+    return mse
 
 X=list(range(1024))
 importances = modelf.feature_importances_
@@ -99,7 +220,7 @@ c=sample(range(100000),1000)
 data_list = []
 
 for i in range(100):
-    filename = f"/home/kowarik/Documents/Saeid/Data/Sim_data_{i}_w.csv"
+    filename = f"/home/kowarik/Documents/Saeid/Data2layer/Sim_data_2layer_{i}.csv"
     datac = np.loadtxt(filename, delimiter=",")
     data_list.append(datac)
     print(i)
@@ -108,23 +229,31 @@ concatenated_data = np.concatenate(data_list, axis=0)
 dat=pd.DataFrame(concatenated_data)
 X = dat.iloc[:,:].values
 
+############Clean Incorrect simulated data
+W = []
+for i in range(len(X)):
+    if np.max(X[i,:1024])<1.0:
+        W.append(X[i,:])
+X = np.array(W)
+##############
+
 mi=[]
 ma=[]
-for i in range(len(X[0])-4):
+for i in range(len(X[0])-8):
     mi.append(X[:,i].min())
     ma.append(X[:,i].max())
 
 data1=pd.DataFrame(X)
 
 train, validate, test = np.split(data1.sample(frac=1, random_state=42),[int(.8*len(data1)), int(.9*len(data1))])
-X_train=train.iloc[:,:-4].values
-y_train=train.iloc[:,-4:].values
+X_train=train.iloc[:,:-8].values
+y_train=train.iloc[:,-8:].values
 y_train[:,-1]=y_train[:,-1]*-1
-X_valid=validate.iloc[:,:-4].values
-y_valid=validate.iloc[:,-4:].values
+X_valid=validate.iloc[:,:-8].values
+y_valid=validate.iloc[:,-8:].values
 y_valid[:,-1]=y_valid[:,-1]*-1
-X_test=test.iloc[:,:-4].values
-y_test=test.iloc[:,-4:].values
+X_test=test.iloc[:,:-8].values
+y_test=test.iloc[:,-8:].values
 y_test[:,-1]=y_test[:,-1]*-1
 
 Tmp=X_test[c,:].copy()
@@ -158,9 +287,9 @@ Ground_truth[:,-1]=Ground_truth[:,-1]*-1
 
 List_to_eval=sample(range(1000),500)
 
-flag2=56
+flag2=0
 
-for test_data_to_fit in List_to_eval[57:500]:
+for test_data_to_fit in List_to_eval[0:500]:
     if test_data_to_fit == List_to_eval[0]:
         flag2 = 0
     else:
@@ -196,16 +325,17 @@ for test_data_to_fit in List_to_eval[57:500]:
         ErrorEq.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         Tmp=parameters_model.predict([predicted_list.reshape(1, 1024)])
         initial_params = Tmp[0]
-        initial_params[-1]=initial_params[-1]*-1
         y_true = X_test[c[test_data_to_fit],sol_index].copy()
         q_val = q_values[sol_index]
         def mean_square_error(y_pred):
-            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1 = y_pred
-            y_predicted = predicted_curve(q_val, thicknesses1, roughnesses1, SLDs_real1, SLDs_img1)
+            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1, thicknesses2, roughnesses2, SLDs_real2, SLDs_img2 = y_pred
+            y_predicted = predicted_curve(q_val, [thicknesses1,thicknesses2], [roughnesses1,roughnesses2], [SLDs_real1,SLDs_real2], [SLDs_img1,SLDs_img2])
             mse = np.mean((y_true - y_predicted) ** 2)
             return mse
-        Tmp = minimize(mean_square_error, initial_params, method='Nelder-Mead')
-        ErrorEqNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp.x)))
+        bounds = [(20,400), (0,60), (0,300), (0,20), (20,400), (0,60), (0,300), (0,20)]
+        Tmp = minimize(mean_square_error, initial_params, method='L-BFGS-B', bounds = bounds)
+        Tmp = np.array(Tmp.x)
+        ErrorEqNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
@@ -231,16 +361,17 @@ for test_data_to_fit in List_to_eval[57:500]:
         ErrorRFR.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         Tmp=parameters_model.predict([predicted_list.reshape(1, 1024)])
         initial_params = Tmp[0]
-        initial_params[-1]=initial_params[-1]*-1
         y_true = X_test[c[test_data_to_fit],sol_index].copy()
         q_val = q_values[sol_index]
         def mean_square_error(y_pred):
-            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1 = y_pred
-            y_predicted = predicted_curve(q_val, thicknesses1, roughnesses1, SLDs_real1, SLDs_img1)
+            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1, thicknesses2, roughnesses2, SLDs_real2, SLDs_img2 = y_pred
+            y_predicted = predicted_curve(q_val, [thicknesses1,thicknesses2], [roughnesses1,roughnesses2], [SLDs_real1,SLDs_real2], [SLDs_img1,SLDs_img2])
             mse = np.mean((y_true - y_predicted) ** 2)
             return mse
-        Tmp = minimize(mean_square_error, initial_params, method='Nelder-Mead')
-        ErrorRFRNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp.x)))
+        bounds = [(20,400), (0,60), (0,300), (0,20), (20,400), (0,60), (0,300), (0,20)]
+        Tmp = minimize(mean_square_error, initial_params, method='L-BFGS-B', bounds = bounds)
+        Tmp = np.array(Tmp.x)
+        ErrorRFRNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
@@ -266,16 +397,17 @@ for test_data_to_fit in List_to_eval[57:500]:
         ErrorRand.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         Tmp=parameters_model.predict([predicted_list.reshape(1, 1024)])
         initial_params = Tmp[0]
-        initial_params[-1]=initial_params[-1]*-1
         y_true = X_test[c[test_data_to_fit],sol_index].copy()
         q_val = q_values[sol_index]
         def mean_square_error(y_pred):
-            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1 = y_pred
-            y_predicted = predicted_curve(q_val, thicknesses1, roughnesses1, SLDs_real1, SLDs_img1)
+            thicknesses1, roughnesses1, SLDs_real1, SLDs_img1, thicknesses2, roughnesses2, SLDs_real2, SLDs_img2 = y_pred
+            y_predicted = predicted_curve(q_val, [thicknesses1,thicknesses2], [roughnesses1,roughnesses2], [SLDs_real1,SLDs_real2], [SLDs_img1,SLDs_img2])
             mse = np.mean((y_true - y_predicted) ** 2)
             return mse
-        Tmp = minimize(mean_square_error, initial_params, method='Nelder-Mead')
-        ErrorRandNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp.x)))
+        bounds = [(20,400), (0,60), (0,300), (0,20), (20,400), (0,60), (0,300), (0,20)]
+        Tmp = minimize(mean_square_error, initial_params, method='L-BFGS-B', bounds = bounds)
+        Tmp = np.array(Tmp.x)
+        ErrorRandNN.append(abs(np.array(Ground_truth1[test_data_to_fit])-np.array(Tmp)))
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
@@ -378,75 +510,75 @@ for test_data_to_fit in List_to_eval[57:500]:
         Acc_RFRNN=np.array(Acc_RFRNN)+np.array(rnpNN1.copy())
         Acc_RFRWO=np.array(Acc_RFRWO)+np.array(rnpWO1.copy())
     print(f"{c[test_data_to_fit]} is {flag2}th and done!!!...")
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFRWO.csv', Error_RFRWO, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_Rand.csv', Error_Rand, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RandNN.csv', Error_RandNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RandWO.csv', Error_RandWO, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_Eq.csv', Error_Eq, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_EqNN.csv', Error_EqNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_EqWO.csv', Error_EqWO, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRWO.csv', Error_RFRWO, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_Rand.csv', Error_Rand, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RandNN.csv', Error_RandNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RandWO.csv', Error_RandWO, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_Eq.csv', Error_Eq, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_EqNN.csv', Error_EqNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_EqWO.csv', Error_EqWO, delimiter=',')
 
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFR.csv', Acc_RFR, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFRNN.csv', Acc_RFRNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFRWO.csv', Acc_RFRWO, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_Rand.csv', Acc_Rand, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RandNN.csv', Acc_RandNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RandWO.csv', Acc_RandWO, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_Eq.csv', Acc_Eq, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_EqNN.csv', Acc_EqNN, delimiter=',')
-    np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_EqWO.csv', Acc_EqWO, delimiter=',')
-
-
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFR.csv', Acc_RFR, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFRNN.csv', Acc_RFRNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFRWO.csv', Acc_RFRWO, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_Rand.csv', Acc_Rand, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RandNN.csv', Acc_RandNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RandWO.csv', Acc_RandWO, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_Eq.csv', Acc_Eq, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_EqNN.csv', Acc_EqNN, delimiter=',')
+    np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_EqWO.csv', Acc_EqWO, delimiter=',')
 
 
 
 
 
-Error_Rand=Error_Rand/65
-Error_RandNN=Error_RandNN/65
-Error_RandWO=Error_RandWO/65
 
-Acc_Rand=Acc_Rand/65
-Acc_RandNN=Acc_RandNN/65
-Acc_RandWO=Acc_RandWO/65
 
-Error_RFR=Error_RFR/65
-Error_RFRNN=Error_RFRNN/65
-Error_RFRWO=Error_RFRWO/65
+Error_Rand=Error_Rand/500
+Error_RandNN=Error_RandNN/500
+Error_RandWO=Error_RandWO/500
 
-Acc_Eq=Acc_Eq/65
-Acc_EqNN=Acc_EqNN/65
-Acc_EqWO=Acc_EqWO/65
+Acc_Rand=Acc_Rand/500
+Acc_RandNN=Acc_RandNN/500
+Acc_RandWO=Acc_RandWO/500
 
-Error_Eq=Error_Eq/65
-Error_EqNN=Error_EqNN/65
-Error_EqWO=Error_EqWO/65
+Error_RFR=Error_RFR/500
+Error_RFRNN=Error_RFRNN/500
+Error_RFRWO=Error_RFRWO/500
 
-Acc_RFR=Acc_RFR/65
-Acc_RFRNN=Acc_RFRNN/65
-Acc_RFRWO=Acc_RFRWO/65
+Acc_Eq=Acc_Eq/500
+Acc_EqNN=Acc_EqNN/500
+Acc_EqWO=Acc_EqWO/500
 
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RFRWO.csv', Error_RFRWO, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_Rand.csv', Error_Rand, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RandNN.csv', Error_RandNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_RandWO.csv', Error_RandWO, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_Eq.csv', Error_Eq, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_EqNN.csv', Error_EqNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Error_1024_EqWO.csv', Error_EqWO, delimiter=',')
+Error_Eq=Error_Eq/500
+Error_EqNN=Error_EqNN/500
+Error_EqWO=Error_EqWO/500
 
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFR.csv', Acc_RFR, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFRNN.csv', Acc_RFRNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RFRWO.csv', Acc_RFRWO, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_Rand.csv', Acc_Rand, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RandNN.csv', Acc_RandNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_RandWO.csv', Acc_RandWO, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_Eq.csv', Acc_Eq, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_EqNN.csv', Acc_EqNN, delimiter=',')
-np.savetxt('/home/kowarik/Documents/Saeid/Data/Models/Results/Acc_1024_EqWO.csv', Acc_EqWO, delimiter=',')
+Acc_RFR=Acc_RFR/500
+Acc_RFRNN=Acc_RFRNN/500
+Acc_RFRWO=Acc_RFRWO/500
+
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRWO.csv', Error_RFRWO, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_Rand.csv', Error_Rand, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RandNN.csv', Error_RandNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RandWO.csv', Error_RandWO, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_Eq.csv', Error_Eq, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_EqNN.csv', Error_EqNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_EqWO.csv', Error_EqWO, delimiter=',')
+
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFR.csv', Acc_RFR, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFRNN.csv', Acc_RFRNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RFRWO.csv', Acc_RFRWO, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_Rand.csv', Acc_Rand, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RandNN.csv', Acc_RandNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_RandWO.csv', Acc_RandWO, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_Eq.csv', Acc_Eq, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_EqNN.csv', Acc_EqNN, delimiter=',')
+np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Acc_1024_EqWO.csv', Acc_EqWO, delimiter=',')
 
 test_data_to_fit = 0
 
