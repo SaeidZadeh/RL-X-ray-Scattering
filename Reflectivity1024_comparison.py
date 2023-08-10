@@ -536,29 +536,29 @@ for test_data_to_fit in List_to_eval[0:500]:
 
 
 
-Error_Rand=Error_Rand/65
-Error_RandNN=Error_RandNN/65
-Error_RandWO=Error_RandWO/65
+Error_Rand=Error_Rand/500
+Error_RandNN=Error_RandNN/500
+Error_RandWO=Error_RandWO/500
 
-Acc_Rand=Acc_Rand/65
-Acc_RandNN=Acc_RandNN/65
-Acc_RandWO=Acc_RandWO/65
+Acc_Rand=Acc_Rand/500
+Acc_RandNN=Acc_RandNN/500
+Acc_RandWO=Acc_RandWO/500
 
-Error_RFR=Error_RFR/65
-Error_RFRNN=Error_RFRNN/65
-Error_RFRWO=Error_RFRWO/65
+Error_RFR=Error_RFR/500
+Error_RFRNN=Error_RFRNN/500
+Error_RFRWO=Error_RFRWO/500
 
-Acc_Eq=Acc_Eq/65
-Acc_EqNN=Acc_EqNN/65
-Acc_EqWO=Acc_EqWO/65
+Acc_Eq=Acc_Eq/500
+Acc_EqNN=Acc_EqNN/500
+Acc_EqWO=Acc_EqWO/500
 
-Error_Eq=Error_Eq/65
-Error_EqNN=Error_EqNN/65
-Error_EqWO=Error_EqWO/65
+Error_Eq=Error_Eq/500
+Error_EqNN=Error_EqNN/500
+Error_EqWO=Error_EqWO/500
 
-Acc_RFR=Acc_RFR/65
-Acc_RFRNN=Acc_RFRNN/65
-Acc_RFRWO=Acc_RFRWO/65
+Acc_RFR=Acc_RFR/500
+Acc_RFRNN=Acc_RFRNN/500
+Acc_RFRWO=Acc_RFRWO/500
 
 np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
 np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
