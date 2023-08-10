@@ -216,7 +216,6 @@ data["parameter"]=[str(x) for x in X]
 data["weights"]=importances
 data=data.sort_values(by=['weights'], ascending=False)
 
-c=sample(range(100000),1000)
 data_list = []
 
 for i in range(100):
@@ -237,11 +236,11 @@ for i in range(len(X)):
 X = np.array(W)
 ##############
 
-mi=[]
-ma=[]
-for i in range(len(X[0])-8):
-    mi.append(X[:,i].min())
-    ma.append(X[:,i].max())
+#mi=[]
+#ma=[]
+#for i in range(len(X[0])-8):
+#    mi.append(X[:,i].min())
+#    ma.append(X[:,i].max())
 
 data1=pd.DataFrame(X)
 
@@ -256,8 +255,9 @@ X_test=test.iloc[:,:-8].values
 y_test=test.iloc[:,-8:].values
 y_test[:,-1]=y_test[:,-1]*-1
 
+c=sample(range(len(y_test)),1000)
 Tmp=X_test[c,:].copy()
-New_X=(np.array(Tmp)-np.array(mi))/(np.array(ma)-np.array(mi))
+New_X=np.array(Tmp)#(np.array(Tmp)-np.array(mi))/(np.array(ma)-np.array(mi))
 
 Error_RFR=[]
 Error_RFRNN=[]
@@ -278,7 +278,7 @@ Acc_Eq=[]
 Acc_EqNN=[]
 Acc_EqWO=[]
 
-Ground_truth=parameters_model.predict([New_X.reshape(1000, 1024)])
+Ground_truth=y_test[c,:].copy()
 
 Tmp=y_test[c,:].copy()
 Ground_truth1=Tmp
@@ -316,7 +316,7 @@ for test_data_to_fit in List_to_eval[0:500]:
         sol_index=list(map(int,list(np.arange(0,1024,1024/(4*(j+1))))))
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
-        New_X=(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
+        New_X=np.array(New_X)#(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
         predicted_list = autoencoder_model.predict(New_X.reshape(1, -1))
         predicted_list[predicted_list < 0] = 0 # replace negative values with zeros
@@ -352,7 +352,7 @@ for test_data_to_fit in List_to_eval[0:500]:
         sol_index=[res[counter] for counter in range(4*(j+1))]
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
-        New_X=(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
+        New_X=np.array(New_X)#(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
         predicted_list = autoencoder_model.predict(New_X.reshape(1, -1))
         predicted_list[predicted_list < 0] = 0 # replace negative values with zeros
@@ -388,7 +388,7 @@ for test_data_to_fit in List_to_eval[0:500]:
         sol_index=sample(list(range(1024)),4*(j+1))
         New_X=X_test[c[test_data_to_fit],:].copy()
         New_X[list(set(range(1024)) - set(sol_index))]=math.nan
-        New_X=(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
+        New_X=np.array(New_X)#(np.array(New_X)-np.array(mi))/(np.array(ma)-np.array(mi))
         New_X[[math.isnan(x) for x in New_X]] = 0 # replace NaN values with zeros
         predicted_list = autoencoder_model.predict(New_X.reshape(1, -1))
         predicted_list[predicted_list < 0] = 0 # replace negative values with zeros
@@ -536,29 +536,29 @@ for test_data_to_fit in List_to_eval[0:500]:
 
 
 
-Error_Rand=Error_Rand/500
-Error_RandNN=Error_RandNN/500
-Error_RandWO=Error_RandWO/500
+Error_Rand=Error_Rand/65
+Error_RandNN=Error_RandNN/65
+Error_RandWO=Error_RandWO/65
 
-Acc_Rand=Acc_Rand/500
-Acc_RandNN=Acc_RandNN/500
-Acc_RandWO=Acc_RandWO/500
+Acc_Rand=Acc_Rand/65
+Acc_RandNN=Acc_RandNN/65
+Acc_RandWO=Acc_RandWO/65
 
-Error_RFR=Error_RFR/500
-Error_RFRNN=Error_RFRNN/500
-Error_RFRWO=Error_RFRWO/500
+Error_RFR=Error_RFR/65
+Error_RFRNN=Error_RFRNN/65
+Error_RFRWO=Error_RFRWO/65
 
-Acc_Eq=Acc_Eq/500
-Acc_EqNN=Acc_EqNN/500
-Acc_EqWO=Acc_EqWO/500
+Acc_Eq=Acc_Eq/65
+Acc_EqNN=Acc_EqNN/65
+Acc_EqWO=Acc_EqWO/65
 
-Error_Eq=Error_Eq/500
-Error_EqNN=Error_EqNN/500
-Error_EqWO=Error_EqWO/500
+Error_Eq=Error_Eq/65
+Error_EqNN=Error_EqNN/65
+Error_EqWO=Error_EqWO/65
 
-Acc_RFR=Acc_RFR/500
-Acc_RFRNN=Acc_RFRNN/500
-Acc_RFRWO=Acc_RFRWO/500
+Acc_RFR=Acc_RFR/65
+Acc_RFRNN=Acc_RFRNN/65
+Acc_RFRWO=Acc_RFRWO/65
 
 np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFR.csv', Error_RFR, delimiter=',')
 np.savetxt('/home/kowarik/Documents/Saeid/Data2layer/Models/Results/Error_1024_RFRNN.csv', Error_RFRNN, delimiter=',')
