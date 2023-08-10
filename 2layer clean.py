@@ -225,13 +225,13 @@ for i in range(len(X)):
         W.append(X[i,:])
 X = np.array(W)
 ##############
-mi=[]
-ma=[]
-for i in range(len(X[0])-8):
-    mi.append(X[:,i].min())
-    ma.append(X[:,i].max())
-for i in range(len(X[0])-8):
-    X[:,i]=(X[:,i]-X[:,i].min())/(X[:,i].max()-X[:,i].min())
+#mi=[]
+#ma=[]
+#for i in range(len(X[0])-8):
+#    mi.append(X[:,i].min())
+#    ma.append(X[:,i].max())
+#for i in range(len(X[0])-8):
+#    X[:,i]=(X[:,i]-X[:,i].min())/(X[:,i].max()-X[:,i].min())
 
 
 data1=pd.DataFrame(X)
@@ -267,11 +267,11 @@ y_test[:,-5]=y_test[:,-5]*-1
 
 
 opt = keras.optimizers.Adam(learning_rate=0.0001)
-model.compile(optimizer=opt,loss=["mae","mae","mae","mae","mae","mae","mae","mae"],metrics=["mse"])
+model.compile(optimizer=opt,loss="mse",metrics="mae")
 model=tf.keras.models.load_model('/home/kowarik/Documents/Saeid/Data2layer/Models/NN_model/trained_model_all_parameters_1024_2layer.h5')
 
 maxepochs=1000
-history=model.fit(X_train,y_train,epochs=maxepochs,validation_data=(X_valid,y_valid),batch_size=32)
+history=model.fit(X_train,y_train,epochs=maxepochs,validation_data=(X_valid,y_valid),batch_size=64)
 filename="trained_model_all_parameters_1024_2layer.h5"
 model.save('/home/kowarik/Documents/Saeid/Data2layer/Models/NN_model/'+filename)
 #################Autoencoder
@@ -300,13 +300,13 @@ for i in range(len(X)):
 X = np.array(W)
 ##############
 
-mi=[]
-ma=[]
-for i in range(len(X[0])-8):
-    mi.append(X[:,i].min())
-    ma.append(X[:,i].max())
-for i in range(len(X[0])-8):
-    X[:,i]=(X[:,i]-X[:,i].min())/(X[:,i].max()-X[:,i].min())
+#mi=[]
+#ma=[]
+#for i in range(len(X[0])-8):
+#    mi.append(X[:,i].min())
+#    ma.append(X[:,i].max())
+#for i in range(len(X[0])-8):
+#    X[:,i]=(X[:,i]-X[:,i].min())/(X[:,i].max()-X[:,i].min())
 
 
 data1=pd.DataFrame(X[:,:-8])
@@ -353,3 +353,4 @@ model.fit(X_train, y_train)
 # Save the trained model to disk
 
 joblib.dump(model, '/home/kowarik/Documents/Saeid/Data2layer/Models/RandomForestReg/random_forest_regressor_500t_2layers.joblib')
+
